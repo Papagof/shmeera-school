@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Shmeera Parent",
+    "slug": "shmeera-parent",
+    "scheme": "shmeera-parent",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.shmeera.parent"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "dev.shmeera.parent"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      ["expo-notifications", { "icon": "./assets/icon.png", "color": "#0f172a" }],
+      ["expo-camera", { "cameraPermission": "Used to take a photo of a pickup designee for the school to verify at the gate." }]
+    ]
+  }
+}

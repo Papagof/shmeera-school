@@ -1,0 +1,23 @@
+const { chromium } = require("playwright");
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  page.on("pageerror", (err) => console.log("[pageerror]", err.message));
+  await page.goto("http://localhost:8082", { waitUntil: "networkidle", timeout: 30000 });
+  await page.waitForTimeout(1500);
+  await page.locator('input[placeholder="Email"]').fill("oseomenai+parent1@gmail.com");
+  await page.locator('input[placeholder="Password"]').fill("Shmeera#2026Live");
+  await page.getByText("Sign in", { exact: true }).click();
+  await page.waitForTimeout(2500);
+  await page.getByText("Designees", { exact: true }).click();
+  await page.waitForTimeout(1500);
+  await page.getByText("Amara Cole", { exact: true }).click();
+  await page.locator('input[placeholder="Designee\'s full name"]').fill("Test Grandma");
+  await page.locator('input[placeholder="Relationship (e.g. grandparent, babysitter)"]').fill("grandmother");
+  await page.getByText("Request designee", { exact: true }).click();
+  await page.waitForTimeout(5000);
+  const body = await page.textContent("body");
+  console.log(body.replace(/\s+/g, " ").slice(0, 1000));
+  await page.screenshot({ path: __dirname + "/designees_after_wait.png", fullPage: true });
+  await browser.close();
+})().catch((e) => { console.error("FATAL", e); process.exit(1); });

@@ -1,0 +1,22 @@
+{
+  "name": "shmeera-school",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Shmeera - multi-tenant school pickup/drop-off safety platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "supabase:test": "supabase test db",
+    "dev:admin": "npm run dev --workspace=apps/admin",
+    "dev:parent": "npm run start --workspace=apps/parent",
+    "dev:teacher": "npm run start --workspace=apps/teacher"
+  },
+  "devDependencies": {
+    "supabase": "^2.116.0"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Shmeera Teacher",
+    "slug": "shmeera-teacher",
+    "scheme": "shmeera-teacher",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.shmeera.teacher"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "dev.shmeera.teacher",
+      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      ["expo-camera", { "cameraPermission": "Used to scan a guardian's pickup/drop-off QR code." }],
+      ["expo-location", {
+        "locationWhenInUsePermission": "A location is required at scan time to confirm every release event."
+      }],
+      ["expo-notifications", { "icon": "./assets/icon.png", "color": "#0f172a" }]
+    ]
+  }
+}

@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Expo / React Native
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Next.js
+.next/
+out/
+
+# Build outputs
+build/
+coverage/
+
+# Supabase
+supabase/.branches
+supabase/.temp
+supabase/.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
