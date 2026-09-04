@@ -25,6 +25,9 @@ web-build/
 .next/
 out/
 
+# Vercel
+.vercel
+
 # Build outputs
 build/
 coverage/

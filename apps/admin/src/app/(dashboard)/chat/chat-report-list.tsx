@@ -22,6 +22,7 @@ interface ThreadMessage {
   id: string;
   sender_role: "guardian" | "teacher";
   body: string | null;
+  attachment_url: string | null;
   created_at: string;
 }
 
@@ -29,6 +30,7 @@ export function ChatReportList({ initialReports }: { initialReports: ChatReportR
   const [reports, setReports] = useState(initialReports);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -45,8 +47,24 @@ export function ChatReportList({ initialReports }: { initialReports: ChatReportR
     const { data, error: invokeError } = await supabase.functions.invoke("get-chat-thread", {
       body: { thread_id: threadId },
     });
-    if (invokeError) setError(await describeFunctionError(invokeError));
-    else setMessages((data?.messages ?? []) as ThreadMessage[]);
+    if (invokeError) {
+      setError(await describeFunctionError(invokeError));
+    } else {
+      const msgs = (data?.messages ?? []) as ThreadMessage[];
+      setMessages(msgs);
+      const withAttachments = msgs.filter((m) => m.attachment_url);
+      if (withAttachments.length > 0) {
+        const results = await Promise.all(
+          withAttachments.map((m) => supabase.storage.from("shmeera").createSignedUrl(m.attachment_url as string, 3600)),
+        );
+        const next: Record<string, string> = {};
+        withAttachments.forEach((m, i) => {
+          const url = results[i]?.data?.signedUrl;
+          if (url) next[m.id] = url;
+        });
+        setAttachmentUrls(next);
+      }
+    }
     setLoadingThread(false);
   }
 
@@ -128,10 +146,14 @@ export function ChatReportList({ initialReports }: { initialReports: ChatReportR
                   <p className="text-xs text-slate-500">No messages.</p>
                 ) : (
                   messages.map((m) => (
-                    <p key={m.id} className={"text-xs " + (m.id === report.message_id ? "rounded bg-red-100 p-1" : "")}>
+                    <div key={m.id} className={"text-xs " + (m.id === report.message_id ? "rounded bg-red-100 p-1" : "")}>
                       <span className="font-medium capitalize">{m.sender_role}:</span> {m.body}
                       <span className="ml-2 text-slate-400">{new Date(m.created_at).toLocaleTimeString()}</span>
-                    </p>
+                      {m.attachment_url && attachmentUrls[m.id] && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={attachmentUrls[m.id]} alt="" className="mt-1 h-24 w-24 rounded object-cover" />
+                      )}
+                    </div>
                   ))
                 )}
               </div>

@@ -37,6 +37,13 @@ Deno.serve(async (req) => {
     if (!threadId || (!messageBody && !attachmentUrl)) {
       throw new HttpError(400, "thread_id and (body or attachment_url) are required");
     }
+    // Same defensive check as manual-override-release / request-designee:
+    // a caller can only reference an attachment path under this exact
+    // thread, so nothing stops one thread's messages from displaying an
+    // attachment uploaded to (and only readable via) a different thread.
+    if (attachmentUrl && !attachmentUrl.startsWith(`schools/${schoolId}/chat/${threadId}/`)) {
+      throw new HttpError(400, "attachment_url must be under this thread's own chat storage path");
+    }
 
     const service = serviceClient();
 
