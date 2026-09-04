@@ -77,6 +77,7 @@ export function PeopleManager({
   const [links, setLinks] = useState(initialLinks);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<"classes" | "teachers" | "parents" | "students">("classes");
 
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
@@ -361,11 +362,41 @@ export function PeopleManager({
   const guardianNameById = (id: string) => guardians.find((g) => g.id === id)?.full_name ?? "—";
   const studentNameById = (id: string) => students.find((s) => s.id === id)?.full_name ?? "—";
 
+  const studentsByClass = [
+    ...classes.map((c) => ({ id: c.id, name: c.name, students: students.filter((s) => s.class_id === c.id) })),
+    { id: "__unassigned__", name: "Unassigned", students: students.filter((s) => s.class_id === null) },
+  ].filter((g) => g.id !== "__unassigned__" || g.students.length > 0);
+
+  const tabs: { key: typeof activeTab; label: string }[] = [
+    { key: "classes", label: "Classes" },
+    { key: "teachers", label: "Teachers" },
+    { key: "parents", label: "Parents" },
+    { key: "students", label: "Students" },
+  ];
+
   return (
     <div className="space-y-6">
       {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="flex gap-1 border-b border-slate-200">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium ${
+              activeTab === t.key
+                ? "border-b-2 border-slate-900 text-slate-900"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="max-w-2xl space-y-6">
+      {activeTab === "classes" && (
         <Section title="Classes">
           <ul className="mb-3 space-y-2">
             {classes.map((c) =>
@@ -420,7 +451,9 @@ export function PeopleManager({
             </button>
           </form>
         </Section>
+      )}
 
+      {activeTab === "teachers" && (
         <Section title="Teachers" hint="Sends a real email invite — they set their own password.">
           <ul className="mb-3 space-y-2">
             {staff.map((s) =>
@@ -468,7 +501,9 @@ export function PeopleManager({
             </button>
           </form>
         </Section>
+      )}
 
+      {activeTab === "parents" && (
         <Section title="Guardians / parents" hint="Sends a real email invite — they set their own password.">
           <ul className="mb-3 space-y-2">
             {guardians.map((g) =>
@@ -507,54 +542,62 @@ export function PeopleManager({
             </button>
           </form>
         </Section>
+      )}
 
-        <Section title="Students">
-          <ul className="mb-3 space-y-2">
-            {students.map((s) =>
-              editingStudentId === s.id ? (
-                <li key={s.id} className="space-y-1 rounded-md border border-slate-200 p-2">
-                  <EditStudentForm
-                    studentRow={s}
-                    classes={classes}
-                    onSave={(fields) => updateStudentRow(s.id, fields)}
-                    onCancel={() => setEditingStudentId(null)}
-                  />
-                </li>
-              ) : (
-                <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex items-center gap-2 text-slate-900">
-                    {photoUrls[s.id] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={photoUrls[s.id]} alt="" className="h-8 w-8 rounded-full object-cover" />
-                    ) : (
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-400">
-                        —
+      {activeTab === "students" && (
+        <>
+        <Section title="Students" hint="Grouped by classroom.">
+          {studentsByClass.map((group) => (
+            <div key={group.id} className="mb-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{group.name}</h3>
+              <ul className="space-y-2">
+                {group.students.map((s) =>
+                  editingStudentId === s.id ? (
+                    <li key={s.id} className="space-y-1 rounded-md border border-slate-200 p-2">
+                      <EditStudentForm
+                        studentRow={s}
+                        classes={classes}
+                        onSave={(fields) => updateStudentRow(s.id, fields)}
+                        onCancel={() => setEditingStudentId(null)}
+                      />
+                    </li>
+                  ) : (
+                    <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="flex items-center gap-2 text-slate-900">
+                        {photoUrls[s.id] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={photoUrls[s.id]} alt="" className="h-8 w-8 rounded-full object-cover" />
+                        ) : (
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-400">
+                            —
+                          </span>
+                        )}
+                        {s.full_name}
+                        {s.status === "inactive" && <span className="text-slate-400"> · inactive</span>}
                       </span>
-                    )}
-                    {s.full_name} <span className="text-slate-500">· {classNameById(s.class_id)}</span>
-                    {s.status === "inactive" && <span className="text-slate-400"> · inactive</span>}
-                  </span>
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => triggerPhotoUpload(s.id)}
-                      disabled={uploadingPhotoFor === s.id}
-                      className={smallButtonClass}
-                    >
-                      {uploadingPhotoFor === s.id ? "Uploading…" : "Photo"}
-                    </button>
-                    <button type="button" onClick={() => setEditingStudentId(s.id)} className={smallButtonClass}>
-                      Edit
-                    </button>
-                    <button type="button" onClick={() => deleteStudent(s.id, s.full_name)} className={smallDangerClass}>
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              ),
-            )}
-            {students.length === 0 && <li className="text-sm text-slate-500">No students yet.</li>}
-          </ul>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => triggerPhotoUpload(s.id)}
+                          disabled={uploadingPhotoFor === s.id}
+                          className={smallButtonClass}
+                        >
+                          {uploadingPhotoFor === s.id ? "Uploading…" : "Photo"}
+                        </button>
+                        <button type="button" onClick={() => setEditingStudentId(s.id)} className={smallButtonClass}>
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => deleteStudent(s.id, s.full_name)} className={smallDangerClass}>
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ),
+                )}
+                {group.students.length === 0 && <li className="text-sm text-slate-500">No students yet.</li>}
+              </ul>
+            </div>
+          ))}
           <input
             ref={photoInputRef}
             type="file"
@@ -578,12 +621,11 @@ export function PeopleManager({
             </button>
           </form>
         </Section>
-      </div>
 
-      <Section
-        title="Guardian ↔ student links"
-        hint="Who's allowed to generate pickup/drop-off codes for which child. A student can have more than one guardian."
-      >
+        <Section
+          title="Guardian ↔ student links"
+          hint="Who's allowed to generate pickup/drop-off codes for which child. A student can have more than one guardian."
+        >
         <ul className="mb-3 space-y-2">
           {links.map((l) =>
             editingLinkId === l.id ? (
@@ -639,7 +681,10 @@ export function PeopleManager({
             Link
           </button>
         </form>
-      </Section>
+        </Section>
+        </>
+      )}
+      </div>
     </div>
   );
 }
