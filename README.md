@@ -78,6 +78,8 @@ The backend (schema, RLS, triggers, 15 Edge Functions) and the admin dashboard a
 
 The parent/teacher Expo apps' web builds (`expo start --web`) have been driven the same way as the admin dashboard, both against the live project. Confirmed: guardian login → code generation → QR render; teacher login → manual code entry → green "Release confirmed" screen on success and a red STOP screen with the real failure reason (e.g. "code has already been used") on failure. Only the camera-scan path is unverified — a headless browser has no camera to grant, so that needs a simulator/device.
 
+Both apps are now also deployed as static Expo web builds so real people can sign in from a real URL instead of running a local dev server: **https://shmeera-parent.vercel.app** and **https://shmeera-teacher.vercel.app** (Vercel projects `godfrey5/shmeera-parent` / `godfrey5/shmeera-teacher`, root directories `apps/parent` / `apps/teacher`, build command `npx expo export -p web`, output directory `dist`, both connected to git for auto-deploy on push to `main`). Neither app uses `expo-router`, so there's no client-side routing to worry about (no SPA rewrite needed). `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY` are set as Vercel project env vars (Production + Preview) since each app's local `.env` is gitignored and never reaches the build. Verified live: real guardian and teacher logins on the deployed URLs loaded real data (children list, class roster) straight from the live Supabase project. Camera-based QR scanning still needs a real device/simulator — a browser (headless or not) can grant camera permission on these URLs same as any web page, but scanning hasn't been verified this way.
+
 **Push notifications** (build order step 8) are implemented end-to-end: `push_tokens` table, `register-push-token` function, both apps register on login (best-effort — no-ops gracefully without a physical device or an EAS project ID), and every relevant Edge Function (`validate-event-code`, `review-designee`, `request-designee`, `report-chat`, `send-chat-message`, `emergency-broadcast`, `sweep-expired-codes`) sends real Expo pushes. Verified live: registered a token, validated a code, confirmed the push send completed without error. `voice_call_admin` escalation currently degrades to a push (no admin phone-number field exists in the data model, only guardian/staff `phone` — see CLAUDE.md).
 
 **People management** is live: the admin dashboard's `/people` page lets a school_admin create, edit, and delete classes, students, and guardian↔student links; invite teachers and guardians (real email invite via `invite-member`, which creates the Supabase Auth user and links `memberships` + `staff`/`guardians` — the invitee sets their own password); and edit or remove a teacher/guardian from the school (their account and other-school memberships are untouched — only the `staff`/`guardians` row and this school's `memberships` row are deleted). A student can have more than one guardian/emergency contact. The teacher app has a "My class" tab (`RosterScreen`) showing the signed-in teacher's own class roster with each child's guardians. All of this was live-tested end to end with real (non-demo) accounts — see "Real accounts" below.
@@ -92,17 +94,19 @@ The demo seed data (`Alpha Academy` / `Beta Elementary`, `supabase/seed.sql`) ha
 
 ### Real accounts
 
-The live project now has one real pilot school ("Riverbend Primary School") instead of demo data, seeded directly (not via `seed.sql`, which would put personal email addresses in git). It uses Gmail `+` aliases so every login lands in one inbox:
+The live project now has one real pilot school ("Riverbend Primary School") instead of demo data, seeded directly (not via `seed.sql`, which would put personal email addresses in git). It uses Gmail `+` aliases so every login lands in one inbox. Sign-in URLs: admin at **https://shmeera-admin.vercel.app**, parent app at **https://shmeera-parent.vercel.app**, teacher app at **https://shmeera-teacher.vercel.app** — no local dev server needed for any of the three anymore.
 
-| Role | Email | Password |
-|---|---|---|
-| school_admin | `oseomenai+admin@gmail.com` | `Shmeera#2026Live` |
-| teacher (Sunrise Room) | `oseomenai+teacher1@gmail.com` | `Shmeera#2026Live` |
-| teacher (Rainbow Room) | `oseomenai+teacher2@gmail.com` | `Shmeera#2026Live` |
-| guardian (Casey Cole) | `oseomenai+parent1@gmail.com` | `Shmeera#2026Live` |
-| guardian (Riley Musa) | `oseomenai+parent2@gmail.com` | `Shmeera#2026Live` |
+| Role | Name | Email | Password |
+|---|---|---|---|
+| school_admin | — | `oseomenai+admin@gmail.com` | `Shmeera#2026Live` |
+| teacher (Sunrise Room) | Jamie Rivera | `oseomenai+teacher1@gmail.com` | `Shmeera#2026Live` |
+| teacher (Rainbow Room) | Morgan Lee | `oseomenai+teacher2@gmail.com` | `Shmeera#2026Live` |
+| guardian (Casey Cole) | Casey Cole | `oseomenai+parent1@gmail.com` | `Shmeera#2026Live` |
+| guardian (Riley Musa) | Riley Musa | `oseomenai+parent2@gmail.com` | `Shmeera#2026Live` |
 
-5 students across the 2 classes, with realistic multi-guardian relationships (two siblings with both a primary guardian and an emergency contact). New real people (an actual teacher or parent, not another alias) should go through `/people` → invite, not raw SQL — they'll get a real invite email and pick their own password.
+The seed people above still use the shared `Shmeera#2026Live` password set at seed time. Two more real people have since been invited through `/people` by the actual school admin — a teacher (Mercury Room) and a guardian — and each picked their own password via `/accept-invite`, so those credentials aren't documented here (and shouldn't be — see the invite flow below).
+
+5+ students across 3 classes, with realistic multi-guardian relationships (e.g. a child with both a primary guardian and an emergency contact — the Parents tab in `/people` is where these guardian↔child links are managed, and a child can have more than one guardian). New real people (an actual teacher or parent, not another alias) should go through `/people` → invite, not raw SQL — they'll get a real invite email and pick their own password.
 
 **Offline manual-override** (SPEC.md §6.13) is implemented end-to-end: the teacher app caches its last-synced roster and school_id (`src/lib/rosterCache.ts`) on every successful "My class" fetch; `ScanScreen`'s location-blocked path and `RosterScreen` both offer a "Manual override release" button leading to `OverrideScreen`, which requires a photo (via the camera, `expo-camera`'s `takePictureAsync`) and a note — no event_code or location involved at all. It tries to submit immediately (covers "no location but network is fine"); if that fails with no server response (genuinely offline), it queues the release locally (`src/lib/overrideQueue.ts`, photo included as base64) and retries automatically every 20s or via a "Sync now" button, in addition to on the next successful roster fetch. Every manual override writes a `security_alerts` row (`kind: 'manual_override_release'`), which the existing admin Alerts page now renders in full (photo, note, released-to name) with an Acknowledge action — reusing infrastructure that already existed rather than building new admin UI. Verified live end to end, including a genuine offline submission (network cut mid-session) queuing and later syncing correctly.
 
