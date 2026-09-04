@@ -1,6 +1,0 @@
-{
-  "buildCommand": "npm run build --workspace=apps/admin",
-  "installCommand": "npm install",
-  "outputDirectory": "apps/admin/.next",
-  "framework": "nextjs"
-}
