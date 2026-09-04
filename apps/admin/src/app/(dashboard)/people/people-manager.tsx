@@ -84,6 +84,8 @@ export function PeopleManager({
   const [editingGuardianId, setEditingGuardianId] = useState<string | null>(null);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [linkingGuardianId, setLinkingGuardianId] = useState<string | null>(null);
+  const [studentSearch, setStudentSearch] = useState("");
 
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState<string | null>(null);
@@ -336,36 +338,43 @@ export function PeopleManager({
     setBusy(false);
   }
 
-  async function linkGuardian(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function linkChildToGuardian(
+    guardianId: string,
+    fields: { student_id: string; relationship: string | null; is_primary: boolean },
+  ) {
     setError(null);
     setBusy(true);
-    const form = new FormData(e.currentTarget);
-    const guardian_id = form.get("guardian_id") as string;
-    const student_id = form.get("student_id") as string;
-    const relationship = (form.get("relationship") as string)?.trim() || null;
-    const is_primary = form.get("is_primary") === "on";
-    const formEl = e.currentTarget;
     const supabase = createClient();
-    const { error: insertErr } = await supabase
-      .from("guardian_student_links")
-      .insert({ guardian_id, student_id, relationship, is_primary, pickup_authorized: true, school_id: schoolId });
+    const { error: insertErr } = await supabase.from("guardian_student_links").insert({
+      guardian_id: guardianId,
+      student_id: fields.student_id,
+      relationship: fields.relationship,
+      is_primary: fields.is_primary,
+      pickup_authorized: true,
+      school_id: schoolId,
+    });
     if (insertErr) setError(insertErr.message);
     else {
-      formEl.reset();
+      setLinkingGuardianId(null);
       await refresh();
     }
     setBusy(false);
   }
 
   const classNameById = (id: string | null) => classes.find((c) => c.id === id)?.name ?? "—";
-  const guardianNameById = (id: string) => guardians.find((g) => g.id === id)?.full_name ?? "—";
   const studentNameById = (id: string) => students.find((s) => s.id === id)?.full_name ?? "—";
 
   const studentsByClass = [
     ...classes.map((c) => ({ id: c.id, name: c.name, students: students.filter((s) => s.class_id === c.id) })),
     { id: "__unassigned__", name: "Unassigned", students: students.filter((s) => s.class_id === null) },
   ].filter((g) => g.id !== "__unassigned__" || g.students.length > 0);
+
+  const searchTerm = studentSearch.trim().toLowerCase();
+  const filteredStudentsByClass = searchTerm
+    ? studentsByClass
+        .map((g) => ({ ...g, students: g.students.filter((s) => s.full_name.toLowerCase().includes(searchTerm)) }))
+        .filter((g) => g.students.length > 0)
+    : studentsByClass;
 
   const tabs: { key: typeof activeTab; label: string }[] = [
     { key: "classes", label: "Classes" },
@@ -504,33 +513,95 @@ export function PeopleManager({
       )}
 
       {activeTab === "parents" && (
-        <Section title="Guardians / parents" hint="Sends a real email invite — they set their own password.">
-          <ul className="mb-3 space-y-2">
-            {guardians.map((g) =>
-              editingGuardianId === g.id ? (
-                <li key={g.id} className="space-y-1 rounded-md border border-slate-200 p-2">
-                  <EditGuardianForm
-                    guardianRow={g}
-                    onSave={(fields) => updateGuardianRow(g.id, fields)}
-                    onCancel={() => setEditingGuardianId(null)}
-                  />
-                </li>
-              ) : (
-                <li key={g.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-slate-900">
-                    {g.full_name} <span className="text-slate-500">· {g.status}</span>
-                  </span>
-                  <div className="flex shrink-0 gap-2">
-                    <button type="button" onClick={() => setEditingGuardianId(g.id)} className={smallButtonClass}>
-                      Edit
-                    </button>
-                    <button type="button" onClick={() => removeGuardian(g)} className={smallDangerClass}>
-                      Remove
-                    </button>
+        <Section
+          title="Guardians / parents"
+          hint="Sends a real email invite — they set their own password. Link each guardian to the children they can pick up; a child can have more than one guardian."
+        >
+          <ul className="mb-3 space-y-3">
+            {guardians.map((g) => {
+              const childLinks = links.filter((l) => l.guardian_id === g.id);
+              const linkedStudentIds = new Set(childLinks.map((l) => l.student_id));
+              const availableStudents = students.filter((s) => !linkedStudentIds.has(s.id));
+
+              if (editingGuardianId === g.id) {
+                return (
+                  <li key={g.id} className="space-y-1 rounded-md border border-slate-200 p-2">
+                    <EditGuardianForm
+                      guardianRow={g}
+                      onSave={(fields) => updateGuardianRow(g.id, fields)}
+                      onCancel={() => setEditingGuardianId(null)}
+                    />
+                  </li>
+                );
+              }
+
+              return (
+                <li key={g.id} className="space-y-2 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-slate-900">
+                      {g.full_name} <span className="text-slate-500">· {g.status}</span>
+                    </span>
+                    <div className="flex shrink-0 gap-2">
+                      <button type="button" onClick={() => setEditingGuardianId(g.id)} className={smallButtonClass}>
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => removeGuardian(g)} className={smallDangerClass}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1 pl-3">
+                    <ul className="space-y-1">
+                      {childLinks.map((l) =>
+                        editingLinkId === l.id ? (
+                          <li key={l.id}>
+                            <EditLinkForm
+                              link={l}
+                              onSave={(fields) => updateLinkRow(l.id, fields)}
+                              onCancel={() => setEditingLinkId(null)}
+                            />
+                          </li>
+                        ) : (
+                          <li key={l.id} className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                            <span>
+                              {studentNameById(l.student_id)}
+                              {l.relationship ? ` · ${l.relationship}` : ""}
+                              {l.is_primary ? " · primary" : ""}
+                              {!l.pickup_authorized ? " · not authorized" : ""}
+                            </span>
+                            <div className="flex shrink-0 gap-1">
+                              <button type="button" onClick={() => setEditingLinkId(l.id)} className={smallButtonClass}>
+                                Edit
+                              </button>
+                              <button type="button" onClick={() => deleteLink(l.id)} className={smallDangerClass}>
+                                Remove
+                              </button>
+                            </div>
+                          </li>
+                        ),
+                      )}
+                      {childLinks.length === 0 && <li className="text-xs text-slate-400">No children linked yet.</li>}
+                    </ul>
+                    {linkingGuardianId === g.id ? (
+                      <AddChildForm
+                        students={availableStudents}
+                        onSave={(fields) => linkChildToGuardian(g.id, fields)}
+                        onCancel={() => setLinkingGuardianId(null)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setLinkingGuardianId(g.id)}
+                        className={smallButtonClass + " mt-1"}
+                        disabled={availableStudents.length === 0}
+                      >
+                        + Link a child
+                      </button>
+                    )}
                   </div>
                 </li>
-              ),
-            )}
+              );
+            })}
             {guardians.length === 0 && <li className="text-sm text-slate-500">No guardians yet.</li>}
           </ul>
           <form onSubmit={(e) => inviteMember(e, "guardian")} className="space-y-2">
@@ -545,9 +616,14 @@ export function PeopleManager({
       )}
 
       {activeTab === "students" && (
-        <>
         <Section title="Students" hint="Grouped by classroom.">
-          {studentsByClass.map((group) => (
+          <input
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
+            placeholder="Search students by name…"
+            className={inputClass + " mb-3"}
+          />
+          {filteredStudentsByClass.map((group) => (
             <div key={group.id} className="mb-4">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{group.name}</h3>
               <ul className="space-y-2">
@@ -621,68 +697,6 @@ export function PeopleManager({
             </button>
           </form>
         </Section>
-
-        <Section
-          title="Guardian ↔ student links"
-          hint="Who's allowed to generate pickup/drop-off codes for which child. A student can have more than one guardian."
-        >
-        <ul className="mb-3 space-y-2">
-          {links.map((l) =>
-            editingLinkId === l.id ? (
-              <li key={l.id} className="rounded-md border border-slate-200 p-2">
-                <EditLinkForm link={l} onSave={(fields) => updateLinkRow(l.id, fields)} onCancel={() => setEditingLinkId(null)} />
-              </li>
-            ) : (
-              <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-slate-900">
-                  {guardianNameById(l.guardian_id)} → {studentNameById(l.student_id)}
-                  <span className="text-slate-500">
-                    {" "}
-                    · {l.relationship ?? "guardian"}
-                    {l.is_primary ? " · primary" : ""}
-                    {!l.pickup_authorized ? " · not authorized" : ""}
-                  </span>
-                </span>
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" onClick={() => setEditingLinkId(l.id)} className={smallButtonClass}>
-                    Edit
-                  </button>
-                  <button type="button" onClick={() => deleteLink(l.id)} className={smallDangerClass}>
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ),
-          )}
-          {links.length === 0 && <li className="text-sm text-slate-500">No links yet.</li>}
-        </ul>
-        <form onSubmit={linkGuardian} className="flex flex-wrap items-center gap-2">
-          <select name="guardian_id" required className={inputClass + " w-auto"}>
-            <option value="">Guardian…</option>
-            {guardians.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.full_name}
-              </option>
-            ))}
-          </select>
-          <select name="student_id" required className={inputClass + " w-auto"}>
-            <option value="">Student…</option>
-            {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.full_name}
-              </option>
-            ))}
-          </select>
-          <input name="relationship" placeholder="Relationship (e.g. mother)" className={inputClass + " w-auto"} />
-          <label className="flex items-center gap-1 text-xs text-slate-600">
-            <input type="checkbox" name="is_primary" /> Primary
-          </label>
-          <button type="submit" disabled={busy} className={buttonClass}>
-            Link
-          </button>
-        </form>
-        </Section>
-        </>
       )}
       </div>
     </div>
@@ -815,6 +829,53 @@ function EditStudentForm({
         </button>
       </div>
     </>
+  );
+}
+
+function AddChildForm({
+  students,
+  onSave,
+  onCancel,
+}: {
+  students: StudentRow[];
+  onSave: (fields: { student_id: string; relationship: string | null; is_primary: boolean }) => void;
+  onCancel: () => void;
+}) {
+  const [studentId, setStudentId] = useState("");
+  const [relationship, setRelationship] = useState("");
+  const [isPrimary, setIsPrimary] = useState(false);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select value={studentId} onChange={(e) => setStudentId(e.target.value)} className={inputClass + " w-auto"}>
+        <option value="">Student…</option>
+        {students.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.full_name}
+          </option>
+        ))}
+      </select>
+      <input
+        value={relationship}
+        onChange={(e) => setRelationship(e.target.value)}
+        placeholder="Relationship (e.g. mother)"
+        className={inputClass + " w-auto"}
+      />
+      <label className="flex items-center gap-1 text-xs text-slate-600">
+        <input type="checkbox" checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} /> Primary
+      </label>
+      <button
+        type="button"
+        disabled={!studentId}
+        onClick={() => onSave({ student_id: studentId, relationship: relationship.trim() || null, is_primary: isPrimary })}
+        className={buttonClass}
+      >
+        Link
+      </button>
+      <button type="button" onClick={onCancel} className={smallButtonClass}>
+        Cancel
+      </button>
+    </div>
   );
 }
 
