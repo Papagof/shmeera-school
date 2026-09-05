@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, Pressable, Text, TextInput, View } from "react-native";
 import { supabase } from "../lib/supabase";
 import { cacheRoster, cacheSchoolId, getCachedRoster } from "../lib/rosterCache";
 import { flushOverrideQueue, getQueueSize } from "../lib/overrideQueue";
@@ -26,6 +26,7 @@ export function RosterScreen({ onOpenOverride }: { onOpenOverride: () => void })
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [search, setSearch] = useState("");
 
   async function trySync() {
     setSyncing(true);
@@ -126,13 +127,31 @@ export function RosterScreen({ onOpenOverride }: { onOpenOverride: () => void })
     );
   }
 
+  const searchTerm = search.trim().toLowerCase();
+  const filteredStudents = searchTerm
+    ? students.filter((s) => s.full_name.toLowerCase().includes(searchTerm))
+    : students;
+
   return (
     <FlatList
-      data={students}
+      data={filteredStudents}
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ padding: 24, gap: 12 }}
       ListHeaderComponent={
         <View style={{ marginBottom: 12, gap: 8 }}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search students by name…"
+            style={{
+              borderWidth: 1,
+              borderColor: "#e2e8f0",
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              fontSize: 15,
+            }}
+          />
           {offline && (
             <Text style={{ color: "#b45309", fontSize: 13 }}>
               Offline — showing your last-synced roster. Use manual override to record a release.
@@ -159,7 +178,11 @@ export function RosterScreen({ onOpenOverride }: { onOpenOverride: () => void })
           </Pressable>
         </View>
       }
-      ListEmptyComponent={<Text style={{ color: "#64748b" }}>No students in your class yet.</Text>}
+      ListEmptyComponent={
+        <Text style={{ color: "#64748b" }}>
+          {searchTerm ? "No students match your search." : "No students in your class yet."}
+        </Text>
+      }
       renderItem={({ item }) => (
         <View style={{ borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 12, padding: 14, flexDirection: "row", gap: 12 }}>
           {photoUrls[item.id] ? (
