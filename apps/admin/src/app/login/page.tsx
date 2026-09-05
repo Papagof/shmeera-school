@@ -22,6 +22,30 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resetStatus, setResetStatus] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  // Before this, the only way to get a forgotten password reset was for
+  // someone with direct Supabase API access to call resetPasswordForEmail
+  // manually (found live: a real user had no self-service path at all).
+  // window.location.origin rather than a hardcoded URL so this keeps
+  // working if the admin app's domain ever changes.
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      setError("Enter your email above first, then click \"Forgot password?\".");
+      return;
+    }
+    setResetting(true);
+    setError(null);
+    setResetStatus(null);
+    const supabase = createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/accept-invite`,
+    });
+    if (resetError) setError(resetError.message);
+    else setResetStatus("If that email has an account, a reset link is on its way — check your inbox.");
+    setResetting(false);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -105,6 +129,7 @@ export default function LoginPage() {
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {resetStatus && <p className="text-sm text-green-700">{resetStatus}</p>}
 
         <button
           type="submit"
@@ -112,6 +137,15 @@ export default function LoginPage() {
           className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {loading ? "Signing in…" : "Sign in"}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleForgotPassword}
+          disabled={resetting}
+          className="w-full text-center text-sm text-slate-500 underline disabled:opacity-50"
+        >
+          {resetting ? "Sending…" : "Forgot password?"}
         </button>
       </form>
     </div>
