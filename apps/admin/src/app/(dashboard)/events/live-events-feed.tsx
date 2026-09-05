@@ -10,12 +10,18 @@ export interface EventRow {
   released_to_name: string | null;
   created_at: string;
   geo: { lat: number; lng: number };
-  students: { full_name: string } | null;
+  students: { full_name: string; class_id: string | null } | null;
   staff: { full_name: string } | null;
 }
 
-export function LiveEventsFeed({ initialEvents }: { initialEvents: EventRow[] }) {
+export interface ClassRow {
+  id: string;
+  name: string;
+}
+
+export function LiveEventsFeed({ initialEvents, classes }: { initialEvents: EventRow[]; classes: ClassRow[] }) {
   const [events, setEvents] = useState(initialEvents);
+  const [activeClassId, setActiveClassId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -32,7 +38,7 @@ export function LiveEventsFeed({ initialEvents }: { initialEvents: EventRow[] })
         async (payload) => {
           const { data: student } = await supabase
             .from("students")
-            .select("full_name")
+            .select("full_name, class_id")
             .eq("id", payload.new.student_id)
             .maybeSingle();
           const { data: staff } = await supabase
@@ -63,40 +69,71 @@ export function LiveEventsFeed({ initialEvents }: { initialEvents: EventRow[] })
     };
   }, []);
 
-  if (events.length === 0) {
-    return <p className="text-sm text-slate-500">No events yet.</p>;
-  }
+  const classNameById = (id: string | null) => classes.find((c) => c.id === id)?.name ?? "Unassigned";
+  const visibleEvents = activeClassId ? events.filter((e) => e.students?.class_id === activeClassId) : events;
 
   return (
-    <table className="w-full text-left text-sm">
-      <thead>
-        <tr className="border-b border-slate-200 text-slate-500">
-          <th className="py-2 pr-4">Time</th>
-          <th className="py-2 pr-4">Student</th>
-          <th className="py-2 pr-4">Type</th>
-          <th className="py-2 pr-4">Released to</th>
-          <th className="py-2 pr-4">Validated by</th>
-        </tr>
-      </thead>
-      <tbody>
-        {events.map((event) => (
-          <tr key={event.id} className="border-b border-slate-100">
-            {/* toLocaleTimeString() intentionally renders in the viewer's own
-                locale/timezone, which the server can't know in advance — the
-                server-rendered value legitimately differs from the client's,
-                so this is React's documented escape hatch rather than a bug
-                to work around structurally (found live: Next.js hydration
-                warning on this exact node). */}
-            <td className="py-2 pr-4 text-slate-500" suppressHydrationWarning>
-              {new Date(event.created_at).toLocaleTimeString()}
-            </td>
-            <td className="py-2 pr-4 font-medium text-slate-900">{event.students?.full_name ?? "—"}</td>
-            <td className="py-2 pr-4 capitalize">{event.type}</td>
-            <td className="py-2 pr-4">{event.released_to_name ?? "—"}</td>
-            <td className="py-2 pr-4 text-slate-500">{event.staff?.full_name ?? "—"}</td>
-          </tr>
+    <div>
+      <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveClassId(null)}
+          className={`px-3 py-2 text-sm font-medium ${
+            activeClassId === null ? "border-b-2 border-slate-900 text-slate-900" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          All classes
+        </button>
+        {classes.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setActiveClassId(c.id)}
+            className={`px-3 py-2 text-sm font-medium ${
+              activeClassId === c.id ? "border-b-2 border-slate-900 text-slate-900" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {c.name}
+          </button>
         ))}
-      </tbody>
-    </table>
+      </div>
+
+      {visibleEvents.length === 0 ? (
+        <p className="text-sm text-slate-500">No events yet.</p>
+      ) : (
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-slate-500">
+              <th className="py-2 pr-4">Time</th>
+              <th className="py-2 pr-4">Student</th>
+              <th className="py-2 pr-4">Class</th>
+              <th className="py-2 pr-4">Type</th>
+              <th className="py-2 pr-4">Released to</th>
+              <th className="py-2 pr-4">Validated by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleEvents.map((event) => (
+              <tr key={event.id} className="border-b border-slate-100">
+                {/* toLocaleTimeString() intentionally renders in the viewer's own
+                    locale/timezone, which the server can't know in advance — the
+                    server-rendered value legitimately differs from the client's,
+                    so this is React's documented escape hatch rather than a bug
+                    to work around structurally (found live: Next.js hydration
+                    warning on this exact node). */}
+                <td className="py-2 pr-4 text-slate-500" suppressHydrationWarning>
+                  {new Date(event.created_at).toLocaleTimeString()}
+                </td>
+                <td className="py-2 pr-4 font-medium text-slate-900">{event.students?.full_name ?? "—"}</td>
+                <td className="py-2 pr-4 text-slate-500">{classNameById(event.students?.class_id ?? null)}</td>
+                <td className="py-2 pr-4 capitalize">{event.type}</td>
+                <td className="py-2 pr-4">{event.released_to_name ?? "—"}</td>
+                <td className="py-2 pr-4 text-slate-500">{event.staff?.full_name ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }

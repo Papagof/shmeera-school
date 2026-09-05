@@ -19,7 +19,7 @@ export function LoginScreen() {
   return (
     <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 12 }}>
       <Text style={{ fontSize: 22, fontWeight: "600" }}>Shmeera</Text>
-      <Text style={{ color: "#64748b", marginBottom: 12 }}>Sign in to generate pickup/drop-off codes.</Text>
+      <Text style={{ color: "#64748b", marginBottom: 12 }}>Sign in to generate drop-off/pickup codes.</Text>
 
       <TextInput
         placeholder="Email"

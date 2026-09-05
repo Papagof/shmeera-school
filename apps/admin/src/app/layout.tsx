@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Shmeera Admin",
-  description: "School pickup/drop-off safety dashboard",
+  description: "School drop-off/pickup safety dashboard",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

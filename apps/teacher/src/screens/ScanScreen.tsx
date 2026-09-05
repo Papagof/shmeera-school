@@ -75,7 +75,7 @@ export function ScanScreen({ onResult, onOpenOverride }: { onResult: (result: Va
   } else if (!permission.granted) {
     cameraArea = (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12 }}>
-        <Text>Camera access is needed to scan pickup/drop-off codes.</Text>
+        <Text>Camera access is needed to scan drop-off/pickup codes.</Text>
         <Pressable onPress={requestPermission} style={{ backgroundColor: "#0f172a", borderRadius: 8, padding: 12 }}>
           <Text style={{ color: "#fff" }}>Grant camera access</Text>
         </Pressable>

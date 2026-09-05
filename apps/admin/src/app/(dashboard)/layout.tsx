@@ -5,6 +5,7 @@ import { SignOutButton } from "./sign-out-button";
 
 const NAV = [
   { href: "/events", label: "Live feed" },
+  { href: "/attendance", label: "Attendance" },
   { href: "/people", label: "People" },
   { href: "/designees", label: "Designees" },
   { href: "/alerts", label: "Alerts" },
