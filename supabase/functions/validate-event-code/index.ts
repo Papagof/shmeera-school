@@ -130,7 +130,16 @@ Deno.serve(async (req) => {
       throw new HttpError(403, "STOP: this student is not on your class roster");
     }
 
-    let releasedToName = student.full_name;
+    // Default to the guardian who generated the code (event_codes.issued_by
+    // is their auth user id) — not the student's own name, which is what a
+    // person picking up/dropping off actually is when there's no designee.
+    const { data: guardian } = await service
+      .from("guardians")
+      .select("full_name")
+      .eq("school_id", schoolId)
+      .eq("user_id", eventCode.issued_by)
+      .maybeSingle();
+    let releasedToName = guardian?.full_name ?? "Unknown guardian";
     let designeePreview: { full_name: string; photo_url: string | null } | null = null;
     if (eventCode.designee_id) {
       const { data: designee } = await service
