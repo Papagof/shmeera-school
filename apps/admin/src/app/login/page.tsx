@@ -40,15 +40,26 @@ export default function LoginPage() {
     const { data: memberships } = await supabase.from("memberships").select("role").eq("user_id", signInData.user.id);
     const roles = new Set((memberships ?? []).map((m) => m.role as string));
 
-    // school_admin/super_admin stay here — everyone else gets redirected to
-    // their own app with the session handed off via the URL hash. Priority
-    // matters only for the (currently nonexistent) case of someone holding
-    // more than one role.
-    let targetAppUrl: string | null = null;
-    if (!roles.has("school_admin") && !roles.has("super_admin")) {
-      if (roles.has("teacher")) targetAppUrl = TEACHER_APP_URL;
-      else if (roles.has("guardian")) targetAppUrl = PARENT_APP_URL;
+    // school_admin lands on the per-school dashboard here; super_admin (who
+    // may not also be a school_admin — it's a platform-wide role, see
+    // apps/admin/src/app/super-admin/page.tsx) goes to the school-onboarding
+    // page instead. Anyone else gets redirected to their own app with the
+    // session handed off via the URL hash. Priority only matters for
+    // someone holding more than one role.
+    if (roles.has("school_admin")) {
+      router.replace("/");
+      router.refresh();
+      return;
     }
+    if (roles.has("super_admin")) {
+      router.replace("/super-admin");
+      router.refresh();
+      return;
+    }
+
+    let targetAppUrl: string | null = null;
+    if (roles.has("teacher")) targetAppUrl = TEACHER_APP_URL;
+    else if (roles.has("guardian")) targetAppUrl = PARENT_APP_URL;
 
     if (targetAppUrl) {
       const { access_token, refresh_token } = signInData.session;
