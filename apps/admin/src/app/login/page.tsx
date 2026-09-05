@@ -4,6 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+// This is the one sign-in page for all three apps (SPEC.md's product is
+// three-sided, but only the admin dashboard has a public web URL — the
+// Expo apps don't). A teacher or guardian signing in here gets handed off
+// to their own app's deployed URL with the session in the URL hash
+// (#access_token=...&refresh_token=...), the exact mechanism the
+// accept-invite page already uses for the invite-email handoff (see
+// apps/admin/src/app/accept-invite/page.tsx) — reused here rather than
+// invented fresh, since it's already proven to survive the
+// @supabase/ssr-vs-plain-client difference between these apps.
+const TEACHER_APP_URL = process.env.NEXT_PUBLIC_TEACHER_APP_URL ?? "https://shmeera-teacher.vercel.app";
+const PARENT_APP_URL = process.env.NEXT_PUBLIC_PARENT_APP_URL ?? "https://shmeera-parent.vercel.app";
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -17,11 +29,30 @@ export default function LoginPage() {
     setError(null);
 
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (signInError) {
-      setError(signInError.message);
+    if (signInError || !signInData.session) {
+      setError(signInError?.message ?? "Sign in failed");
       setLoading(false);
+      return;
+    }
+
+    const { data: memberships } = await supabase.from("memberships").select("role").eq("user_id", signInData.user.id);
+    const roles = new Set((memberships ?? []).map((m) => m.role as string));
+
+    // school_admin/super_admin stay here — everyone else gets redirected to
+    // their own app with the session handed off via the URL hash. Priority
+    // matters only for the (currently nonexistent) case of someone holding
+    // more than one role.
+    let targetAppUrl: string | null = null;
+    if (!roles.has("school_admin") && !roles.has("super_admin")) {
+      if (roles.has("teacher")) targetAppUrl = TEACHER_APP_URL;
+      else if (roles.has("guardian")) targetAppUrl = PARENT_APP_URL;
+    }
+
+    if (targetAppUrl) {
+      const { access_token, refresh_token } = signInData.session;
+      window.location.href = `${targetAppUrl}/#access_token=${access_token}&refresh_token=${refresh_token}`;
       return;
     }
 
@@ -33,8 +64,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Shmeera Admin</h1>
-          <p className="text-sm text-slate-500">Sign in to your school&apos;s dashboard.</p>
+          <h1 className="text-xl font-semibold text-slate-900">Shmeera</h1>
+          <p className="text-sm text-slate-500">
+            Sign in with your school email. Admins land on the dashboard; teachers and guardians are sent to their
+            own app.
+          </p>
         </div>
 
         <label className="block text-sm font-medium text-slate-700">

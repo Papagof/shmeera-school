@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Image, Pressable, Text, TextInput, View } 
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { describeFunctionError } from "@shmeera/shared";
 import { supabase } from "../lib/supabase";
+import { setLastRead } from "../lib/chatReadState";
 
 interface Message {
   id: string;
@@ -19,11 +20,13 @@ export function ChatThreadScreen({
   title,
   myUserId,
   onBack,
+  onRead,
 }: {
   threadId: string;
   title: string;
   myUserId: string;
   onBack: () => void;
+  onRead?: (threadId: string) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
@@ -91,6 +94,17 @@ export function ChatThreadScreen({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
+
+  useEffect(() => {
+    // Being on this screen with these messages loaded IS "having read them"
+    // — covers both the initial fetch and any message that arrives live via
+    // the realtime subscription above while the thread stays open.
+    if (messages.length === 0) return;
+    const latest = messages[messages.length - 1];
+    setLastRead(threadId, latest.created_at);
+    onRead?.(threadId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, threadId]);
 
   async function send() {
     const text = draft.trim();

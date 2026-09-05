@@ -17,6 +17,8 @@ interface OpenThread {
   title: string;
 }
 
+const MY_ROLE = "teacher";
+
 function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={{ flex: 1, paddingVertical: 12, alignItems: "center", borderBottomWidth: 2, borderBottomColor: active ? "#0f172a" : "transparent" }}>
@@ -31,20 +33,68 @@ export default function App() {
   const [tab, setTab] = useState<"scan" | "roster" | "chat">("scan");
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [openThread, setOpenThread] = useState<OpenThread | null>(null);
+  const [unreadThreadIds, setUnreadThreadIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setResult(null);
       setOpenThread(null);
     });
+
+    // The unified sign-in page (apps/admin's /login — see the comment
+    // there) hands a teacher off here with the session in the URL hash
+    // (#access_token=...&refresh_token=...), same mechanism as the
+    // invite-email accept-invite flow. supabase.ts sets
+    // detectSessionInUrl: false, so this has to be done explicitly; `window`
+    // only exists on the web build, hence the guard.
+    async function init() {
+      if (typeof window !== "undefined" && window.location?.hash) {
+        const params = new URLSearchParams(window.location.hash.slice(1));
+        const access_token = params.get("access_token");
+        const refresh_token = params.get("refresh_token");
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
+          window.history.replaceState(null, "", window.location.pathname);
+          return;
+        }
+      }
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+    }
+    init();
+
     return () => subscription.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (session) registerForPushNotifications();
   }, [session]);
+
+  useEffect(() => {
+    // App-wide badge: no push on web (README — Expo push tokens need a real
+    // device), and ChatListScreen only knows about unread threads once it's
+    // mounted, so this global subscription is what lets a teacher see a new
+    // message arrived while sitting on the Scan/My class tab. Marking a
+    // thread unread here is always safe even if it's the one currently
+    // open — ChatThreadScreen's own onRead immediately clears it.
+    if (!session) return;
+    const channel = supabase
+      .channel(`chat-badge:${session.user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_messages" },
+        (payload) => {
+          const msg = payload.new as { thread_id: string; sender_role: string };
+          if (msg.sender_role === MY_ROLE) return;
+          setUnreadThreadIds((prev) => new Set(prev).add(msg.thread_id));
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user.id]);
 
   let content: React.ReactNode;
   let showTabs = false;
@@ -63,6 +113,14 @@ export default function App() {
         title={openThread.title}
         myUserId={session.user.id}
         onBack={() => setOpenThread(null)}
+        onRead={(threadId) =>
+          setUnreadThreadIds((prev) => {
+            if (!prev.has(threadId)) return prev;
+            const next = new Set(prev);
+            next.delete(threadId);
+            return next;
+          })
+        }
       />
     );
   } else {
@@ -73,7 +131,10 @@ export default function App() {
       ) : tab === "roster" ? (
         <RosterScreen onOpenOverride={() => setOverrideOpen(true)} />
       ) : (
-        <ChatListScreen onOpenThread={(id, title) => setOpenThread({ id, title })} />
+        <ChatListScreen
+          onOpenThread={(id, title) => setOpenThread({ id, title })}
+          onUnreadThreadsChange={setUnreadThreadIds}
+        />
       );
   }
 
@@ -83,7 +144,11 @@ export default function App() {
         <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#e2e8f0" }}>
           <Tab label="Scan" active={tab === "scan"} onPress={() => setTab("scan")} />
           <Tab label="My class" active={tab === "roster"} onPress={() => setTab("roster")} />
-          <Tab label="Chat" active={tab === "chat"} onPress={() => setTab("chat")} />
+          <Tab
+            label={unreadThreadIds.size > 0 ? `Chat (${unreadThreadIds.size})` : "Chat"}
+            active={tab === "chat"}
+            onPress={() => setTab("chat")}
+          />
         </View>
       )}
       <View style={{ flex: 1 }}>{content}</View>

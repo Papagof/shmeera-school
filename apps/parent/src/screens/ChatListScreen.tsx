@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 import { supabase } from "../lib/supabase";
+import { getLastRead } from "../lib/chatReadState";
 
 interface ThreadRow {
   id: string;
@@ -9,8 +10,17 @@ interface ThreadRow {
   staff: { full_name: string } | null;
 }
 
-export function ChatListScreen({ onOpenThread }: { onOpenThread: (threadId: string, title: string) => void }) {
+const MY_ROLE = "guardian";
+
+export function ChatListScreen({
+  onOpenThread,
+  onUnreadThreadsChange,
+}: {
+  onOpenThread: (threadId: string, title: string) => void;
+  onUnreadThreadsChange?: (threadIds: Set<string>) => void;
+}) {
   const [threads, setThreads] = useState<ThreadRow[]>([]);
+  const [unreadIds, setUnreadIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,11 +32,43 @@ export function ChatListScreen({ onOpenThread }: { onOpenThread: (threadId: stri
     supabase
       .from("chat_threads")
       .select("id, status, students(full_name), staff:teacher_id(full_name)")
-      .then(({ data, error: fetchError }) => {
-        if (fetchError) setError(fetchError.message);
-        else setThreads((data ?? []) as unknown as ThreadRow[]);
+      .then(async ({ data, error: fetchError }) => {
+        if (fetchError) {
+          setError(fetchError.message);
+          setLoading(false);
+          return;
+        }
+        const rows = (data ?? []) as unknown as ThreadRow[];
+        setThreads(rows);
         setLoading(false);
+
+        if (rows.length === 0) return;
+        // Latest message per thread, derived client-side (no server-side
+        // GROUP BY via supabase-js): ordered desc, so the first row seen
+        // per thread_id is that thread's latest message.
+        const { data: recent } = await supabase
+          .from("chat_messages")
+          .select("thread_id, sender_role, created_at")
+          .in("thread_id", rows.map((r) => r.id))
+          .order("created_at", { ascending: false });
+
+        const latestByThread = new Map<string, { sender_role: string; created_at: string }>();
+        for (const m of recent ?? []) {
+          if (!latestByThread.has(m.thread_id as string)) {
+            latestByThread.set(m.thread_id as string, { sender_role: m.sender_role as string, created_at: m.created_at as string });
+          }
+        }
+
+        const unread = new Set<string>();
+        for (const [threadId, latest] of latestByThread) {
+          if (latest.sender_role === MY_ROLE) continue; // my own last message — nothing to read
+          const lastRead = await getLastRead(threadId);
+          if (!lastRead || latest.created_at > lastRead) unread.add(threadId);
+        }
+        setUnreadIds(unread);
+        onUnreadThreadsChange?.(unread);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -48,12 +90,16 @@ export function ChatListScreen({ onOpenThread }: { onOpenThread: (threadId: stri
       }
       renderItem={({ item }) => {
         const title = `${item.staff?.full_name ?? "Teacher"} — ${item.students?.full_name ?? "Student"}`;
+        const unread = unreadIds.has(item.id);
         return (
           <Pressable
             onPress={() => onOpenThread(item.id, title)}
-            style={{ borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 12, padding: 14 }}
+            style={{ borderWidth: 1, borderColor: unread ? "#0f172a" : "#e2e8f0", borderRadius: 12, padding: 14 }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "500" }}>{item.staff?.full_name ?? "Teacher"}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {unread && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#dc2626" }} />}
+              <Text style={{ fontSize: 16, fontWeight: unread ? "700" : "500" }}>{item.staff?.full_name ?? "Teacher"}</Text>
+            </View>
             <Text style={{ color: "#64748b", fontSize: 13, marginTop: 2 }}>About {item.students?.full_name ?? "your child"}</Text>
             {item.status === "muted" && <Text style={{ color: "#b45309", fontSize: 12, marginTop: 4 }}>Muted</Text>}
           </Pressable>
